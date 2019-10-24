@@ -1,22 +1,44 @@
 /** @format */
 
-import { Reducer } from 'redux'
+import { Reducer, AnyAction, Action } from 'redux'
+
 import { actionTypes } from './actions'
 import { isRereAction, applyOps } from './helpers'
-import { WrappedArray } from './rereTypes'
+import { WrappedArray, WrappedObject } from './rereTypes'
 
-export type RereReducer<T = any> = Reducer<T[] | WrappedArray<T>>
+const defaultActualState: actualState<any> = {
+    actual: undefined,
+    original: undefined,
+    redos: [],
+    undos: [],
+}
 
-export const rereUndo = <V>(
-    reducer: RereReducer<V>,
+// prettier-ignore
+export type RereReducer<S, A = any> =
+    (state: S, action: Action<A>) =>
+        S | (S extends (infer V)[] ? WrappedArray<V> : WrappedObject<S>)
+
+// export type RereReducer<S> = Reducer<S> & ReducerReturn<S>
+
+export function rereUndo<S extends any[]>(
+    reducer: RereReducer<S>,
     config?: RereConfig,
-): Reducer<actualState<V>> => {
+): Reducer<actualState<S>>
+
+export function rereUndo<S extends filledObject>(
+    reducer: RereReducer<S>,
+    config?: RereConfig,
+): Reducer<actualState<S>>
+
+export function rereUndo<S extends filledObject | any[]>(
+    reducer: Reducer<S | WrappedArray<Unwrap<S>>> | Reducer<S | WrappedObject<S>>,
+    config?: RereConfig,
+): Reducer<actualState<S>, RereAction | AnyAction> {
     config = {
-        stateType: 'object',
         alwaysRunReducer: false,
         ...config,
     }
-    return (state, action) => {
+    return (state = defaultActualState, action) => {
         if (isRereAction(action)) {
             if (config.alwaysRunReducer) {
                 reducer(state.actual, action)
@@ -33,20 +55,14 @@ export const rereUndo = <V>(
 
             let { redos, undos } = state
 
-            if (action.type === actionTypes.UNDO) {
-                redos = Object.assign([], redos)
-                undos = Object.assign([], undos)
-            } else if (action.type === actionTypes.REDO) {
-                // Take advantage of symmetry
-                redos = Object.assign([], undos)
-                undos = Object.assign([], redos)
-            } else {
-                // This should never happen. We done messed up...
-                return state
+            // Take advantage of symmetry
+            if (action.type === actionTypes.REDO) {
+                ;[redos, undos] = [undos, redos]
             }
 
             // Handle both undos and redos as if they were undos
             let { revertBelow = 5, repeat = 1 } = action
+            // This is reducing wrong, but I'll fix it when my mind is clearer
             let undosToApply = state.undos.reduceRight<typeof state.undos>(
                 (undosToApply, nextUndo) =>
                     nextUndo.perserverance <= revertBelow && repeat-- >= 0
@@ -56,8 +72,11 @@ export const rereUndo = <V>(
             )
 
             let newUndos = undos.slice(0, undos.length - undosToApply.length)
-
-            let { newState, reverseOps } = applyOps(state.actual, undosToApply)
+            // prettier-ignore
+            let { newState, reverseOps } = applyOps(
+                state.actual,
+                undosToApply as RereOperation<S>[]
+            )
             let newRedos = [...redos, ...reverseOps]
 
             if (action.type === actionTypes.REDO) {
@@ -72,20 +91,27 @@ export const rereUndo = <V>(
             }
         }
 
-        let reduced = <V[] | WrappedArray<V>>reducer(state.actual, action)
+        let reduced = reducer(state.actual, action)
         if (reduced === state.actual) {
             return state
-        } else if (!(reduced instanceof WrappedArray)) {
-            // This can probably be optimized
-            reduced = new WrappedArray(state.actual).replace(reduced).commit()
+        } else if (!(reduced instanceof WrappedArray || reduced instanceof WrappedObject)) {
+            // TODO: move this to a function
+            if (Array.isArray(reduced)) {
+                reduced = new WrappedArray(state.actual as any[]).replace(reduced).commit()
+            } else {
+                reduced = new WrappedObject(state.actual).replace(reduced).commit()
+            }
         } else if (reduced.undos[reduced.undos.length - 1].type !== 'commit') {
             reduced.commit()
         }
+
         return {
-            actual: reduced.actual,
-            undos: [...state.undos, ...reduced.undos],
+            actual: reduced.actual as S,
+            undos: [...state.undos, ...(reduced.undos as RereOperation<S>[])],
             redos: [],
-            original: state.original,
+            // Just wait for null coalescing...
+            original:
+                typeof state.original !== 'undefined' ? state.original : (reduced.actual as S),
         }
     }
 }

@@ -5,7 +5,7 @@ const perserverance = 1
 
 export class WrappedArray<V = any> {
     actual: V[]
-    undos: rereArrayOperation<V>[]
+    undos: RereArrayOperation<V>[]
 
     constructor(input: V[]) {
         this.actual = [...input]
@@ -73,80 +73,40 @@ export class WrappedArray<V = any> {
 
 export const array = <T>(input: T[]) => new WrappedArray(input)
 
-// Returns an object containing uncomputed operations on the input array
-// export const array = <T = any>(input: T[]): rereArray<T> => {
-//     let final = [...input]
+export class WrappedObject<O> {
+    actual: O
+    undos: RereObjectOperation<O>[]
 
-//     const push: rereArray<T>['push'] = (obj, index) => {
-//         rere.__rereOperations.push({ type: 'push', index, value: obj, perserverance })
-//         final.splice(index, 0, obj)
-//         return rere
-//     }
+    constructor(input: O) {
+        this.actual = { ...input }
+    }
 
-//     const pop: rereArray<T>['pop'] = (index, callback) => {
-//         index = typeof index === 'number' ? index : final.length - 1
-//         const [val] = final.splice(index, index + 1)
-//         if (callback) {
-//             callback(val)
-//         }
-//         rere.__rereOperations.push({ type: 'pop', index, perserverance })
-//         return rere
-//     }
+    replace(replaceWith: O) {
+        this.undos.push({ type: 'replaceWith', replacement: this.actual, perserverance })
+        this.actual = replaceWith
+        return this
+    }
 
-//     const replace: rereArray<T>['replace'] = (replaceWith) => {
-//         final.splice(0, final.length, ...replaceWith)
-//         rere.__rereOperations.push({ type: 'replaceWith', value: replaceWith, perserverance })
-//         return rere
-//     }
+    set(key: keyof O, value: O[keyof O]) {
+        this.undos.push({ type: 'set', key, value: this.actual[key], perserverance })
+        this.actual[key] = value
+        return this
+    }
 
-//     const set: rereArray<T>['set'] = (index, value) => {
-//         final[index] = value
-//         rere.__rereOperations.push({ type: 'setArray', index, value, perserverance })
-//         return rere
-//     }
+    setSub(sub: Partial<O>) {
+        let oldSub: Partial<O> = {}
+        for (let key in sub) {
+            oldSub[key] = this.actual[key]
+        }
+        this.undos.push({ type: 'setSub', sub: oldSub, perserverance })
+        Object.assign(this.actual, sub)
+        return this
+    }
 
-//     const rere: rereArray = {
-//         __rereOperations: [],
-//         value: input,
-//         final,
-//         push,
-//         pop,
-//         set,
-//         replace,
-//     }
+    commit(perserverance: number = 5) {
+        this.undos.push({ type: 'commit', perserverance })
+        return this
+    }
+}
 
-//     return rere
-// }
-
-// Returns an object containing uncomputed operations on the input object
-// export const object = <O>(input: O): rereObject<O> => {
-//     const final = { ...input }
-
-//     const set: rereObject<O>['set'] = (key, value) => {
-//         final[key] = value
-//         rere.__rereOperations.push({ type: 'set', key, value, perserverance })
-//         return rere
-//     }
-
-//     const setSub: rereObject<O>['setSub'] = (sub) => {
-//         Object.assign(final, sub)
-//         rere.__rereOperations.push({ type: 'setSub', sub, perserverance })
-//         return rere
-//     }
-
-//     const replace: rereObject<O>['replace'] = (replaceWith) => {
-//         Object.assign(final, replaceWith) // TODO: Remove entries from `final` not on `replaceWith`
-//         rere.__rereOperations.push({ type: 'replaceWith', value: replaceWith, perserverance })
-//         return rere
-//     }
-
-//     const rere: rereObject = {
-//         __rereOperations: [],
-//         value: input,
-//         final,
-//         set,
-//         setSub,
-//         replace,
-//     }
-//     return rere
-// }
+export const object = <O>(obj: O) => new WrappedObject(obj)
