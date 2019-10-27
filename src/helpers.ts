@@ -44,6 +44,10 @@ export function applyOps<S extends any[] | filledObject = any>(
                     replaceItems = newState.splice(op.start, op.deleteCount, ...op.replaceItems)
                     reverseOps.push({ ...op, deleteCount: replaceItems.length, replaceItems })
                     break
+                case 'reverse':
+                    newState.reverse()
+                    reverseOps.push(op)
+                    break
                 case 'commit':
                     reverseOps.push(op)
                     break

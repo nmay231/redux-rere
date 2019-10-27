@@ -11,6 +11,10 @@ export class WrappedArray<V = any> {
         this.actual = [...input]
     }
 
+    get length() {
+        return this.actual.length
+    }
+
     push(obj: V, index?: number) {
         if (typeof index === 'number' && 0 <= index && index < this.actual.length) {
             this.actual.splice(index, 0, obj)
@@ -46,6 +50,18 @@ export class WrappedArray<V = any> {
         if (callback) {
             callback(spliced)
         }
+        return this
+    }
+
+    concat(...appendedArrays: Array<V | V[]>) {
+        for (let arr of appendedArrays) {
+            if (Array.isArray(arr)) {
+                this.splice(this.actual.length, 0, arr)
+            } else {
+                this.push(arr)
+            }
+        }
+        return this
     }
 
     set(index: number, value: V) {
@@ -62,6 +78,42 @@ export class WrappedArray<V = any> {
             replacement: this.actual.splice(0, this.actual.length, ...replaceWith),
             perserverance,
         })
+        return this
+    }
+
+    filter(toKeep: (value: V, index: number, array: V[]) => unknown = (val) => val) {
+        this.undos.push({
+            type: 'replaceWith',
+            replacement: [...this.actual],
+            perserverance,
+            // revert: {
+            //     type: 'filter',
+            //     filter: toKeep,
+            //     perserverance,
+            // },
+        })
+        this.actual = this.actual.filter(toKeep)
+        return this
+    }
+
+    sort(compare?: (A: V, B: V) => number) {
+        this.undos.push({
+            type: 'replaceWith',
+            replacement: [...this.actual],
+            perserverance,
+            // revert: {
+            //     type: 'sort',
+            //     sort: compare,
+            //     perserverance,
+            // },
+        })
+        this.actual.sort(compare)
+        return this
+    }
+
+    reverse() {
+        this.undos.push({ type: 'reverse', perserverance })
+        this.actual.reverse()
         return this
     }
 

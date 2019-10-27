@@ -6,11 +6,12 @@ type Operation<T extends string, A = {}> = {
 } & A
 
 declare type RereArrayOperation<V> =
-    | Operation<'replaceWith', { replacement: V[] }>
+    | Operation<'replaceWith', { replacement: V[]; revert?: RereArrayOperation<V> }>
     | Operation<'push', { index?: number; value: V }>
     | Operation<'pop', { index?: number }>
     | Operation<'set', { index: number; value: V }>
     | Operation<'splice', { start: number; deleteCount?: number; replaceItems?: V[] }>
+    | Operation<'reverse'>
     | Operation<'commit'>
 
 declare type RereObjectOperation<S> =
