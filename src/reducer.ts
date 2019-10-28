@@ -10,7 +10,7 @@ import { WrappedObject } from './rereObject'
 // prettier-ignore
 export type RereReducer<S, A = any> =
     (state: S, action: Action<A>) =>
-        S | (S extends (infer V)[] ? WrappedArray<V> : WrappedObject<S>)
+        S | (S extends any[] ? WrappedArray<Unwrap<S>> : WrappedObject<S>)
 
 const defaultActualState: actualState<any> = {
     actual: undefined,
@@ -19,7 +19,7 @@ const defaultActualState: actualState<any> = {
     undos: [],
 }
 
-export function rereUndo<S extends any[]>(
+export function rereUndo<S extends Unwrap<S>[]>(
     reducer: RereReducer<S>,
     config?: Partial<RereConfig>,
 ): Reducer<actualState<S>>
@@ -29,7 +29,7 @@ export function rereUndo<S extends FilledObject>(
     config?: Partial<RereConfig>,
 ): Reducer<actualState<S>>
 
-export function rereUndo<S extends FilledObject | any[]>(
+export function rereUndo<S extends FilledObject | Unwrap<S>[]>(
     reducer: Reducer<S | WrappedArray<Unwrap<S>>> | Reducer<S | WrappedObject<S>>,
     config: Partial<RereConfig> = {},
 ): Reducer<actualState<S>, RereAction | AnyAction> {
@@ -38,6 +38,18 @@ export function rereUndo<S extends FilledObject | any[]>(
         ...config,
     }
     return (state = defaultActualState, action) => {
+        if (typeof state.original === 'undefined') {
+            let reduced = reducer(undefined, action)
+            if (!(reduced instanceof WrappedArray || reduced instanceof WrappedObject)) {
+                reduced = toWrapped(reduced)
+            }
+            return {
+                ...state,
+                original: reduced.actual as S,
+                actual: reduced.actual as S,
+            }
+        }
+
         if (isRereAction(action)) {
             if (config.alwaysRunReducer) {
                 reducer(state.actual, action)
