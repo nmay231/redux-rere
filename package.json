@@ -6,11 +6,20 @@
     "author": "Noah May <noahmouse2011@gmail.com>",
     "license": "MIT",
     "private": false,
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "npx webpack",
+        "prepack": "npm run build",
+        "test": "echo 'Tests not implemented yet\n'"
+    },
     "devDependencies": {
         "@types/jest": "^24.0.19",
         "jest": "^24.9.0",
         "prettier": "^1.18.2",
-        "typescript": "^3.6.4"
+        "ts-loader": "^6.2.1",
+        "typescript": "^3.6.4",
+        "webpack": "^4.41.2",
+        "webpack-cli": "^3.3.9"
     },
     "dependencies": {
         "@types/redux": "^3.6.0"
