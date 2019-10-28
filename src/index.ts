@@ -3,8 +3,9 @@
 import { Reducer, AnyAction, Action } from 'redux'
 
 import { actionTypes } from './actions'
-import { isRereAction, applyOps } from './helpers'
-import { WrappedArray, WrappedObject } from './rereTypes'
+import { isRereAction, toWrapped } from './helpers'
+import { WrappedArray } from './rereArray'
+import { WrappedObject } from './rereObject'
 
 const defaultActualState: actualState<any> = {
     actual: undefined,
@@ -22,17 +23,17 @@ export type RereReducer<S, A = any> =
 
 export function rereUndo<S extends any[]>(
     reducer: RereReducer<S>,
-    config?: RereConfig,
+    config?: Partial<RereConfig>,
 ): Reducer<actualState<S>>
 
-export function rereUndo<S extends filledObject>(
+export function rereUndo<S extends FilledObject>(
     reducer: RereReducer<S>,
-    config?: RereConfig,
+    config?: Partial<RereConfig>,
 ): Reducer<actualState<S>>
 
-export function rereUndo<S extends filledObject | any[]>(
+export function rereUndo<S extends FilledObject | any[]>(
     reducer: Reducer<S | WrappedArray<Unwrap<S>>> | Reducer<S | WrappedObject<S>>,
-    config?: RereConfig,
+    config: Partial<RereConfig> = {},
 ): Reducer<actualState<S>, RereAction | AnyAction> {
     config = {
         alwaysRunReducer: false,
@@ -55,36 +56,31 @@ export function rereUndo<S extends filledObject | any[]>(
 
             let { redos, undos } = state
 
-            // Take advantage of symmetry
+            // Take advantage of symmetry to handle both undos and redos the same
             if (action.type === actionTypes.REDO) {
                 ;[redos, undos] = [undos, redos]
             }
 
-            // Handle both undos and redos as if they were undos
             let { revertBelow = 5, repeat = 1 } = action
-            // This is reducing wrong, but I'll fix it when my mind is clearer
-            let undosToApply = state.undos.reduceRight<typeof state.undos>(
+            // TODO: This is reducing wrong, but I'll fix it when my mind is clearer
+            let undosToApply = state.undos.reduceRight<typeof undos>(
                 (undosToApply, nextUndo) =>
-                    nextUndo.perserverance <= revertBelow && repeat-- >= 0
+                    (nextUndo.perserverance || 1) <= revertBelow && repeat-- >= 0
                         ? [nextUndo, ...undosToApply]
                         : undosToApply,
                 [],
             )
 
+            const wrapped = toWrapped(state.actual, undosToApply)
+            let newRedos = [...redos, ...(wrapped.undos as typeof redos)]
             let newUndos = undos.slice(0, undos.length - undosToApply.length)
-            // prettier-ignore
-            let { newState, reverseOps } = applyOps(
-                state.actual,
-                undosToApply as RereOperation<S>[]
-            )
-            let newRedos = [...redos, ...reverseOps]
 
             if (action.type === actionTypes.REDO) {
                 ;[newUndos, newRedos] = [newRedos, newUndos]
             }
 
             return {
-                actual: newState,
+                actual: wrapped.actual as S,
                 undos: newUndos,
                 redos: newRedos,
                 original: state.original,
@@ -95,12 +91,9 @@ export function rereUndo<S extends filledObject | any[]>(
         if (reduced === state.actual) {
             return state
         } else if (!(reduced instanceof WrappedArray || reduced instanceof WrappedObject)) {
-            // TODO: move this to a function
-            if (Array.isArray(reduced)) {
-                reduced = new WrappedArray(state.actual as any[]).replace(reduced).commit()
-            } else {
-                reduced = new WrappedObject(state.actual).replace(reduced).commit()
-            }
+            reduced = toWrapped(reduced)
+                .replace(reduced as any[] & S) // TODO: Fix the need for this awkward type conversion
+                .commit()
         } else if (reduced.undos[reduced.undos.length - 1].type !== 'commit') {
             reduced.commit()
         }

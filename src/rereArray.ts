@@ -1,14 +1,56 @@
 /** @format */
 
-// Default perserverance for simple operations
-const perserverance = 1
+export const array = <T>(input: T[]) => new WrappedArray(input)
 
 export class WrappedArray<V = any> {
     actual: V[]
     undos: RereArrayOperation<V>[]
 
-    constructor(input: V[]) {
+    constructor(input: V[], operations?: RereArrayOperation<V>[]) {
         this.actual = [...input]
+
+        if (!operations) {
+            return
+        }
+        for (let op of operations) {
+            switch (op.type) {
+                case 'replaceWith':
+                    if (op.revert) {
+                        this.undos.push(op.revert)
+                    } else {
+                        this.undos.push({ ...op, replacement: this.actual })
+                    }
+                    this.actual = op.replacement
+                    break
+                case 'push':
+                    this.push(op.value, op.index)
+                    break
+                case 'pop':
+                    this.pop(op.index)
+                    break
+                case 'set':
+                    this.set(op.index, op.value)
+                    break
+                case 'splice':
+                    this.splice(op.start, op.deleteCount, op.replaceItems)
+                    break
+                case 'reverse':
+                    this.reverse()
+                    break
+                case 'filter':
+                    this.filter(op.filter)
+                    break
+                case 'sort':
+                    this.sort(op.sorter)
+                    break
+                case 'map':
+                    this.map(op.map, op.unmap)
+                    break
+                case 'commit':
+                    this.commit(op.perserverance)
+                    break
+            }
+        }
     }
 
     get length() {
@@ -21,12 +63,12 @@ export class WrappedArray<V = any> {
         } else {
             this.actual.push(obj)
         }
-        this.undos.push({ type: 'pop', index, perserverance })
+        this.undos.push({ type: 'pop', index })
         return this
     }
 
-    pop(index?: number, callback?: (popped: V) => void) {
-        let popped: V
+    pop(index?: number, callback?: (popped: V | undefined) => void) {
+        let popped: V | undefined
         if (typeof index === 'number' && 0 <= index && index < this.actual.length) {
             ;[popped] = this.actual.splice(index, 1)
         } else {
@@ -34,18 +76,19 @@ export class WrappedArray<V = any> {
         }
         // Note: the callback has to be pure since it would only be created in a reducer
         if (callback) callback(popped)
-        this.undos.push({ type: 'push', index, value: popped, perserverance })
+        if (popped) {
+            this.undos.push({ type: 'push', index, value: popped })
+        }
         return this
     }
 
     splice(start: number, deleteCount?: number, items?: V[], callback?: (spliced: V[]) => void) {
-        let spliced = this.actual.splice(start, deleteCount, ...items)
+        let spliced = this.actual.splice(start, deleteCount || 0, ...(items || []))
         this.undos.push({
             type: 'splice',
             start,
             deleteCount,
             replaceItems: spliced,
-            perserverance,
         })
         if (callback) {
             callback(spliced)
@@ -65,7 +108,7 @@ export class WrappedArray<V = any> {
     }
 
     set(index: number, value: V) {
-        this.undos.push({ type: 'set', index, value: this.actual[index], perserverance })
+        this.undos.push({ type: 'set', index, value: this.actual[index] })
         if (typeof index === 'number' && 0 <= index && index < this.actual.length) {
             this.actual[index] = value
         }
@@ -76,7 +119,6 @@ export class WrappedArray<V = any> {
         this.undos.push({
             type: 'replaceWith',
             replacement: this.actual.splice(0, this.actual.length, ...replaceWith),
-            perserverance,
         })
         return this
     }
@@ -85,12 +127,10 @@ export class WrappedArray<V = any> {
         this.undos.push({
             type: 'replaceWith',
             replacement: [...this.actual],
-            perserverance,
-            // revert: {
-            //     type: 'filter',
-            //     filter: toKeep,
-            //     perserverance,
-            // },
+            revert: {
+                type: 'filter',
+                filter: toKeep,
+            },
         })
         this.actual = this.actual.filter(toKeep)
         return this
@@ -100,58 +140,32 @@ export class WrappedArray<V = any> {
         this.undos.push({
             type: 'replaceWith',
             replacement: [...this.actual],
-            perserverance,
-            // revert: {
-            //     type: 'sort',
-            //     sort: compare,
-            //     perserverance,
-            // },
+            revert: {
+                type: 'sort',
+                sorter: compare,
+            },
         })
         this.actual.sort(compare)
         return this
     }
 
     reverse() {
-        this.undos.push({ type: 'reverse', perserverance })
+        this.undos.push({ type: 'reverse' })
         this.actual.reverse()
         return this
     }
 
-    commit(perserverance: number = 5) {
-        this.undos.push({ type: 'commit', perserverance })
-        return this
-    }
-}
-
-export const array = <T>(input: T[]) => new WrappedArray(input)
-
-export class WrappedObject<O> {
-    actual: O
-    undos: RereObjectOperation<O>[]
-
-    constructor(input: O) {
-        this.actual = { ...input }
-    }
-
-    replace(replaceWith: O) {
-        this.undos.push({ type: 'replaceWith', replacement: this.actual, perserverance })
-        this.actual = replaceWith
-        return this
-    }
-
-    set(key: keyof O, value: O[keyof O]) {
-        this.undos.push({ type: 'set', key, value: this.actual[key], perserverance })
-        this.actual[key] = value
-        return this
-    }
-
-    setSub(sub: Partial<O>) {
-        let oldSub: Partial<O> = {}
-        for (let key in sub) {
-            oldSub[key] = this.actual[key]
+    map(map: (val: V) => V, unmap?: (val: V) => V) {
+        if (unmap) {
+            this.undos.push({ type: 'map', map: unmap, unmap: map })
+        } else {
+            this.undos.push({
+                type: 'replaceWith',
+                replacement: [...this.actual],
+                revert: { type: 'map', map },
+            })
         }
-        this.undos.push({ type: 'setSub', sub: oldSub, perserverance })
-        Object.assign(this.actual, sub)
+        this.actual = this.actual.map(map)
         return this
     }
 
@@ -160,5 +174,3 @@ export class WrappedObject<O> {
         return this
     }
 }
-
-export const object = <O>(obj: O) => new WrappedObject(obj)

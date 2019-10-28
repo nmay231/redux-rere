@@ -2,7 +2,7 @@
 
 type Operation<T extends string, A = {}> = {
     type: T
-    perserverance: number
+    perserverance?: number
 } & A
 
 declare type RereArrayOperation<V> =
@@ -11,6 +11,9 @@ declare type RereArrayOperation<V> =
     | Operation<'pop', { index?: number }>
     | Operation<'set', { index: number; value: V }>
     | Operation<'splice', { start: number; deleteCount?: number; replaceItems?: V[] }>
+    | Operation<'filter', { filter: (value: V, index: number, array: V[]) => unknown }>
+    | Operation<'sort', { sorter: ((A: V, B: V) => number) | undefined }>
+    | Operation<'map', { map: (val: V) => V; unmap?: (val: V) => V }>
     | Operation<'reverse'>
     | Operation<'commit'>
 
@@ -43,4 +46,4 @@ declare interface RereConfig {
 
 declare type Unwrap<S> = S extends (infer V)[] ? V : never
 
-declare type filledObject = { [key: string]: any }
+declare type FilledObject = { [key: string]: any }
