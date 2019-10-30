@@ -3,7 +3,7 @@
 import { Reducer, AnyAction, Action } from 'redux'
 
 import { actionTypes } from './actions'
-import { isRereAction, toWrapped } from './utils'
+import { isRereAction, toWrapped, collectOpsToApply } from './utils'
 import { WrappedArray } from './rereArray'
 import { WrappedObject } from './rereObject'
 
@@ -37,6 +37,7 @@ export function rereUndo<S extends FilledObject | Unwrap<S>[]>(
         alwaysRunReducer: false,
         ...config,
     }
+
     return (state = defaultActualState, action) => {
         if (typeof state.original === 'undefined') {
             let reduced = reducer(undefined, action)
@@ -72,14 +73,7 @@ export function rereUndo<S extends FilledObject | Unwrap<S>[]>(
             }
 
             let { revertBelow = 5, repeat = 1 } = action
-            // TODO: This is reducing wrong, but I'll fix it when my mind is clearer
-            let undosToApply = state.undos.reduceRight<typeof undos>(
-                (undosToApply, nextUndo) =>
-                    (nextUndo.perserverance || 1) <= revertBelow && repeat-- >= 0
-                        ? [nextUndo, ...undosToApply]
-                        : undosToApply,
-                [],
-            )
+            let undosToApply = collectOpsToApply(state.undos, revertBelow, repeat)
 
             const wrapped = toWrapped(state.actual, undosToApply)
             let newRedos = [...redos, ...(wrapped.undos as typeof redos)]
